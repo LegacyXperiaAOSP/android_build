@@ -16,6 +16,9 @@ Invoke ". build/envsetup.sh" from your shell to add the following functions to y
 - resgrep: Greps on all local res/*.xml files.
 - sgrep:   Greps on all local source files.
 - godir:   Go to the directory containing a file.
+- cmremote: Add git remote for CM Gerrit Review
+- mka:      Builds using SCHED_BATCH on all processors
+- reposync: Parallel repo sync using ionice and SCHED_BATCH
 
 Look at the source to view more functions. The complete list is:
 EOF
@@ -1631,6 +1634,55 @@ function godir () {
     \cd $T/$pathname
 }
 
+function cmremote()
+{
+    git remote rm cmgerrit 2> /dev/null
+    if [ ! -d .git ]
+    then
+        echo .git directory not found. Please run this from the root directory of the Android repository you wish to set up.
+    fi
+    GERRIT_REMOTE=$(cat .git/config  | grep git://github.com | awk '{ print $NF }' | sed s#git://github.com/##g)
+    if [ -z "$GERRIT_REMOTE" ]
+    then
+        GERRIT_REMOTE=$(cat .git/config  | grep http://github.com | awk '{ print $NF }' | sed s#http://github.com/##g)
+        if [ -z "$GERRIT_REMOTE" ]
+        then
+            echo Unable to set up the git remote, are you in the root of the repo?
+            return 0
+        fi
+    fi
+    CMUSER=`git config --get review.review.cyanogenmod.com.username`
+    if [ -z "$CMUSER" ]
+    then
+        git remote add cmgerrit ssh://review.cyanogenmod.com:29418/$GERRIT_REMOTE
+    else
+        git remote add cmgerrit ssh://$CMUSER@review.cyanogenmod.com:29418/$GERRIT_REMOTE
+    fi
+    echo You can now push to "cmgerrit".
+}
+export -f cmremote
+
+function mka() {
+    case `uname -s` in
+        Darwin)
+            make -j `sysctl hw.ncpu|cut -d" " -f2` "$@"
+            ;;
+        *)
+            schedtool -B -n 1 -e ionice -n 1 make -j `cat /proc/cpuinfo | grep "^processor" | wc -l` "$@"
+            ;;
+    esac
+}
+
+function reposync() {
+    case `uname -s` in
+        Darwin)
+            repo sync -j 4 "$@"
+            ;;
+        *)
+            schedtool -B -n 1 -e ionice -n 1 repo sync -j 4 "$@"
+            ;;
+    esac
+}
 # Force JAVA_HOME to point to java 1.7 or java 1.6  if it isn't already set.
 #
 # Note that the MacOS path for java 1.7 includes a minor revision number (sigh).
