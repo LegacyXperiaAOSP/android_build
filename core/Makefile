@@ -1564,8 +1564,14 @@ $(INTERNAL_OTA_PACKAGE_TARGET): $(BUILT_TARGET_FILES_PACKAGE) $(DISTTOOLS)
 	   $(if $(OEM_OTA_CONFIG), -o $(OEM_OTA_CONFIG)) \
 	   $(BUILT_TARGET_FILES_PACKAGE) $@
 
-.PHONY: otapackage
+LX_TARGET_PACKAGE := $(PRODUCT_OUT)/lx-$(LX_VERSION).zip
+
+.PHONY: otapackage bacon
 otapackage: $(INTERNAL_OTA_PACKAGE_TARGET)
+bacon: otapackage
+	$(hide) ln -f $(INTERNAL_OTA_PACKAGE_TARGET) $(LX_TARGET_PACKAGE)
+	$(hide) $(MD5SUM) $(LX_TARGET_PACKAGE) > $(LX_TARGET_PACKAGE).md5sum
+	@echo -e ${CL_CYN}"Package Complete: $(LX_TARGET_PACKAGE)"${CL_RST}
 
 endif    # recovery_fstab is defined
 endif    # TARGET_NO_KERNEL != true
