@@ -179,6 +179,10 @@ include $(BUILD_SYSTEM)/node_fns.mk
 include $(BUILD_SYSTEM)/product.mk
 include $(BUILD_SYSTEM)/device.mk
 
+# An LX build needs only the LX product makefiles.
+ifneq ($(LX_BUILD),)
+all_product_configs := $(shell find device -path "*/$(LX_BUILD)/lx.mk")
+else
 ifneq ($(strip $(TARGET_BUILD_APPS)),)
 # An unbundled app build needs only the core product makefiles.
 all_product_configs := $(call get-product-makefiles,\
@@ -188,7 +192,9 @@ else
 # files in the tree.
 all_product_configs := $(get-all-product-makefiles)
 endif
+endif
 
+ifeq ($(LX_BUILD),)
 # Find the product config makefile for the current product.
 # all_product_configs consists items like:
 # <product_name>:<path_to_the_product_makefile>
@@ -210,6 +216,10 @@ $(foreach f, $(all_product_configs),\
 _cpm_words :=
 _cpm_word1 :=
 _cpm_word2 :=
+else
+current_product_makefile := $(strip $(all_product_configs))
+all_product_makefiles := $(strip $(all_product_configs))
+endif
 current_product_makefile := $(strip $(current_product_makefile))
 all_product_makefiles := $(strip $(all_product_makefiles))
 

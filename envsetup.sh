@@ -67,6 +67,14 @@ function check_product()
         echo "Couldn't locate the top of the tree.  Try setting TOP." >&2
         return
     fi
+
+    if (echo -n $1 | grep -q -e "^lx_") ; then
+       LX_BUILD=$(echo -n $1 | sed -e 's/^lx_//g')
+    else
+       LX_BUILD=
+    fi
+    export LX_BUILD
+
         TARGET_PRODUCT=$1 \
         TARGET_BUILD_VARIANT= \
         TARGET_BUILD_TYPE= \
