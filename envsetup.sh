@@ -502,6 +502,7 @@ function brunch()
 function breakfast()
 {
     target=$1
+    local variant=$2
     if [ $# -eq 0 ]; then
         # No arguments, so let's have the full menu
         lunch
@@ -512,7 +513,10 @@ function breakfast()
             lunch $target
         else
             # This is probably just the model name
-            lunch aosp_$target-userdebug
+            if [ -z "$variant" ]; then
+                variant="userdebug"
+            fi
+            lunch aosp_$target-$variant
         fi
     fi
     return $?
