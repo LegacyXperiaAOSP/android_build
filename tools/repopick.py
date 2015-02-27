@@ -66,8 +66,8 @@ parser.add_argument('-q', '--quiet', action='store_true', help='print as little 
 parser.add_argument('-v', '--verbose', action='store_true', help='print extra information to aid in debug')
 parser.add_argument('-f', '--force', action='store_true', help='force cherry pick even if commit has been merged')
 parser.add_argument('-p', '--pull', action='store_true', help='execute pull instead of cherry-pick')
-parser.add_argument('-t', '--topic', help='pick all commits from a specified topic')
-parser.add_argument('-Q', '--query', help='pick all commits using the specified query')
+parser.add_argument('-t', '--topic', nargs='*', help='pick all commits from a specified topic')
+parser.add_argument('-Q', '--query', nargs='*', help='pick all commits using the specified query')
 args = parser.parse_args()
 if args.start_branch == None and args.abandon_first:
     parser.error('if --abandon-first is set, you must also give the branch name with --start-branch')
@@ -192,55 +192,103 @@ while(True):
     ppaths = re.split('\s*:\s*', pline.decode())
     project_name_to_path[ppaths[1]] = ppaths[0]
 
-# Get all commits for a specified query
-def fetch_query(query):
-    url = 'http://review.cyanogenmod.org/changes/?q=%s' % query
-    if args.verbose:
-        print('Fetching all commits using query: %s\n' % query)
-    f = urllib.request.urlopen(url)
-    d = f.read().decode("utf-8")
-    if args.verbose:
-        print('Result from request:\n' + d)
-
-    # Clean up the result
-    d = d.split(')]}\'\n')[1]
-    matchObj = re.match(r'\[\s*\]', d)
-    if matchObj:
-        sys.stderr.write('ERROR: Query %s was not found on the server\n' % query)
-        sys.exit(1)
-    d = re.sub(r'\[(.*)\]', r'\1', d)
-    if args.verbose:
-        print('Result from request:\n' + d)
-
-    data = json.loads(d)
-    changelist = []
-    for c in xrange(0, len(data)):
-        changelist.append(data[c]['_number'])
-
-    # Reverse the array as we want to pick the lowest one first
-    args.change_number = reversed(changelist)
-
+# Get all commits for a specified topic
 if args.topic:
-    fetch_query("topic:{0}".format(args.topic))
+    for argument in args.topic:
+        gerrit, tag = argument.rsplit('_', 1)
 
+        if 'CM' in gerrit:
+            url = 'http://review.cyanogenmod.org/changes/?q=topic:%s' % tag
+        elif 'LX' in gerrit:
+            url = 'http://review.msm7x30.org/changes/?q=topic:%s' % tag
+
+        if args.verbose:
+            print('Fetching all commits from topic: %s\n' % tag)
+        f = urllib.request.urlopen(url)
+        d = f.read().decode("utf-8")
+        if args.verbose:
+            print('Result from request:\n' + d)
+
+        # Clean up the result
+        d = d.split(')]}\'\n')[1]
+        matchObj = re.match(r'\[\s*\]', d)
+        if matchObj:
+            sys.stderr.write('ERROR: Topic %s was not found on the server\n' % tag)
+            sys.exit(1)
+        # d = re.sub(r'\[(.*)\]', r'\1', d)
+        if args.verbose:
+            print('Result from request:\n' + d)
+
+        data = json.loads(d)
+        changelist = []
+        for c in xrange(0, len(data)):
+            changelist.append(int(data[c]['_number']))
+
+        # For compatibility with other gerrit commit (these 2 "reverse" will be delete later)
+        changelist.sort(reverse=True)
+
+        # Add the gerrit argument to the new list
+        changelist = [('%s_' % gerrit) + str(listitem) for listitem in changelist]
+
+        # Reverse the array as we want to pick the lowest one first
+        args.change_number += reversed(changelist)
+
+# Get all commits for a specified query
 if args.query:
-    fetch_query(args.query)
+    for argument in args.query:
+        gerrit, pquery = argument.rsplit('_', 1)
+        if 'CM' in gerrit:
+            url = 'http://review.cyanogenmod.org/changes/?q=%s' % pquery
+        elif 'LX' in gerrit:
+            url = 'http://review.msm7x30.org/changes/?q=%s' % pquery
+        if args.verbose:
+            print('Fetching all commits using query: %s\n' % pquery)
+        f = urllib.request.urlopen(url)
+        d = f.read().decode("utf-8")
+        if args.verbose:
+            print('Result from request:\n' + d)
+
+        # Clean up the result
+        d = d.split(')]}\'\n')[1]
+        matchObj = re.match(r'\[\s*\]', d)
+        if matchObj:
+            sys.stderr.write('ERROR: Query %s was not found on the server\n' % pquery)
+            sys.exit(1)
+        # d = re.sub(r'\[(.*)\]', r'\1', d)
+        if args.verbose:
+            print('Result from request:\n' + d)
+
+        data = json.loads(d)
+        changelist = []
+        for c in xrange(0, len(data)):
+            changelist.append(data[c]['_number'])
+
+        # For compatibility with other gerrit commit (these 2 "reverse" will be delete later)
+        changelist.sort(reverse=True)
+
+        # Add the gerrit argument to the new list
+        changelist = [('%s_' % gerrit) + str(listitem) for listitem in changelist]
+
+        # Reverse the array as we want to pick the lowest one first
+        args.change_number += reversed(changelist)
 
 # Check for range of commits and rebuild array
 changelist = []
-for change in args.change_number:
+for argument in args.change_number:
+    gerrit, change = argument.split('_', 1)
     c=str(change)
     if '-' in c:
         templist = c.split('-')
         for i in range(int(templist[0]), int(templist[1]) + 1):
-            changelist.append(str(i))
+            changelist.append(('%s_' % gerrit) + str(i))
     else:
-        changelist.append(c)
+        changelist.append(('%s_' % gerrit) + c)
 
 args.change_number = changelist
 
 # Iterate through the requested change numbers
-for changeps in args.change_number:
+for argument in args.change_number:
+    gerrit, changeps = argument.split('_', 1)
 
     if '/' in changeps:
         change = changeps.split('/')[0]
@@ -265,7 +313,10 @@ for changeps in args.change_number:
     # gerrit returns two lines, a magic string and then valid JSON:
     #   )]}'
     #   [ ... valid JSON ... ]
-    url = 'http://review.cyanogenmod.org/changes/?q={change}&o={query_revision}&o=CURRENT_COMMIT&pp=0'.format(change=change, query_revision=query_revision)
+    if 'CM' in gerrit:
+        url = 'http://review.cyanogenmod.org/changes/?q={change}&o={query_revision}&o=CURRENT_COMMIT&pp=0'.format(change=change, query_revision=query_revision)
+    elif 'LX' in gerrit:
+        url = 'http://review.msm7x30.org/changes/?q={change}&o={query_revision}&o=CURRENT_COMMIT&pp=0'.format(change=change, query_revision=query_revision)
     if args.verbose:
         print('Fetching from: %s\n' % url)
     try:
@@ -381,18 +432,23 @@ for changeps in args.change_number:
     # Print out some useful info
     if not args.quiet:
         print('--> Subject:       "%s"' % subject)
+        print('--> Gerrit:        %s' % gerrit)
         print('--> Project path:  %s' % project_path)
         print('--> Change number: %d (Patch Set %d)' % (change_number, patch_number))
         print('--> Author:        %s <%s> %s' % (author_name, author_email, author_date))
         print('--> Committer:     %s <%s> %s' % (committer_name, committer_email, committer_date))
 
     # Try fetching from GitHub first
+    if 'CM' in gerrit:
+        github_remote = 'github'
+    elif 'LX' in gerrit:
+        github_remote = 'msm7x30'
     if args.verbose:
        print('Trying to fetch the change from GitHub')
     if args.pull:
-      cmd = 'cd %s && git pull --no-edit github %s' % (project_path, fetch_ref)
+      cmd = 'cd %s && git pull --no-edit %s %s' % (project_path, github_remote, fetch_ref)
     else:
-      cmd = 'cd %s && git fetch github %s' % (project_path, fetch_ref)
+      cmd = 'cd %s && git fetch %s %s' % (project_path, github_remote, fetch_ref)
     execute_cmd(cmd, True)
     # Check if it worked
     FETCH_HEAD = '%s/.git/FETCH_HEAD' % project_path
@@ -411,4 +467,3 @@ for changeps in args.change_number:
       execute_cmd(cmd)
     if not args.quiet:
         print('')
-
