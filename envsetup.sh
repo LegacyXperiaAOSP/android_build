@@ -20,6 +20,7 @@ Invoke ". build/envsetup.sh" from your shell to add the following functions to y
 - sgrep:   Greps on all local source files.
 - godir:   Go to the directory containing a file.
 - cmremote: Add git remote for CM Gerrit Review
+- msmremote: Add git remote for msm7x30 Gerrit Review
 - aospremote: Add git remote for matching AOSP repository
 - cafremote: Add git remote for matching CodeAurora repository.
 - mka:      Builds using SCHED_BATCH on all processors
@@ -1696,6 +1697,25 @@ function cmremote()
         git remote add cmgerrit ssh://$CMUSER@review.cyanogenmod.org:29418/$GERRIT_REMOTE
     fi
     echo You can now push to "cmgerrit".
+}
+
+function msmremote()
+{
+    git remote rm msmgerrit 2> /dev/null
+    GERRIT_REMOTE=$(git config --get remote.msm7x30.projectname)
+    if [ -z "$GERRIT_REMOTE" ]
+    then
+        echo Unable to set up the git remote, are you under a git repo?
+        return 0
+    fi
+    MSMUSER=$(git config --get review.review.msm7x30.org.username)
+    if [ -z "$MSMUSER" ]
+    then
+        git remote add msmgerrit ssh://review.msm7x30.org:29418/$GERRIT_REMOTE
+    else
+        git remote add msmgerrit ssh://$MSMUSER@review.msm7x30.org:29418/$GERRIT_REMOTE
+    fi
+    echo You can now push to "msmgerrit".
 }
 
 function aospremote()
